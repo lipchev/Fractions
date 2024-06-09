@@ -273,45 +273,145 @@ public readonly partial struct Fraction {
                 denominator: BigInteger.Zero);
         }
 
-        if (_normalizationNotApplied || factor._normalizationNotApplied) {
-            if (thisNumerator.IsZero) {
-                return this;
-            }
-
-            if (otherNumerator.IsZero) {
-                return factor;
-            }
-
-            reduceTerms(ref thisNumerator, ref otherDenominator); // TODO benchmark for both cases
-            reduceTerms(ref otherNumerator, ref thisDenominator);
-
-            return new Fraction(true,
-                MultiplyTerms(ref thisNumerator, ref otherNumerator),
-                MultiplyTerms(ref thisDenominator, ref otherDenominator));
-        }
-
         if (thisNumerator.IsZero || otherNumerator.IsZero) {
             return Zero;
+        }
+
+        if (_normalizationNotApplied || factor._normalizationNotApplied) {
+            return MultiplyNonZeroTerms(thisNumerator, thisDenominator, otherNumerator, otherDenominator);
         }
 
         return ReduceSigned(
             MultiplyTerms(ref thisNumerator, ref otherNumerator),
             MultiplyTerms(ref thisDenominator, ref otherDenominator));
+    }
 
-        static void reduceTerms(ref BigInteger numerator, ref BigInteger denominator) {
-            if (numerator.IsOne || denominator.IsOne ||
-                numerator == BigInteger.MinusOne || denominator == BigInteger.MinusOne) {
-                return;
-            }
-
-            var gcd = BigInteger.GreatestCommonDivisor(numerator, denominator);
-            if (gcd.IsOne) {
-                return;
-            }
-
-            numerator /= gcd;
-            denominator /= gcd;
+    private static Fraction MultiplyNonZeroTerms(BigInteger thisNumerator, BigInteger thisDenominator, BigInteger otherNumerator, BigInteger otherDenominator) {
+        if (thisDenominator.Sign == -1) {
+            thisNumerator = -thisNumerator;
+            thisDenominator = -thisDenominator;
         }
+
+        if (otherDenominator.Sign == -1) {
+            otherNumerator = -otherNumerator;
+            otherDenominator = -otherDenominator;
+        }
+
+        var isNegative = false;
+        if (thisNumerator.Sign == 1) {
+            if (otherNumerator.Sign == -1) {
+                otherNumerator = -otherNumerator;
+                isNegative = true;
+            }
+        } else {
+            thisNumerator = -thisNumerator;
+            if (otherNumerator.Sign == 1) {
+                isNegative = true;
+            } else {
+                otherNumerator = -otherNumerator;
+            }
+        }
+
+        // {9/7} * {3/4} = {9/7} / {4/3} = {(2 + 1/4) / (2 + 1/3)} = {(9/4)/(7/3)} = {27/28}
+        // {20/10} * {10/25} = {20/10} / {25/10} = {(0 + 20/25) / (1 + 0/10)} = {(20/25)/(1)} = {20/25}
+        BigInteger firstNumerator, firstDenominator, secondNumerator, secondDenominator;
+        if (thisNumerator >= otherDenominator) {
+            if (otherDenominator.IsOne) {
+                firstNumerator = thisNumerator;
+                firstDenominator = BigInteger.One;
+            } else {
+                var numeratorQuotient = BigInteger.DivRem(thisNumerator, otherDenominator, out var remainderNumerators);
+                if (remainderNumerators.IsZero) {
+                    firstNumerator = numeratorQuotient;
+                    firstDenominator = BigInteger.One;
+                } else {
+                    firstNumerator = numeratorQuotient * otherDenominator + remainderNumerators;
+                    firstDenominator = otherDenominator;
+                }
+            }
+
+            if (thisDenominator >= otherNumerator) {
+                if (otherNumerator.IsOne) {
+                    secondNumerator = thisDenominator;
+                    secondDenominator = BigInteger.One;
+                } else {
+                    var denominatorQuotient = BigInteger.DivRem(thisDenominator, otherNumerator, out var remainderDenominators);
+                    if (remainderDenominators.IsZero) {
+                        secondNumerator = denominatorQuotient;
+                        secondDenominator = BigInteger.One;
+                    } else {
+                        secondNumerator = denominatorQuotient * otherNumerator + remainderDenominators;
+                        secondDenominator = otherNumerator;
+                    }
+                }
+            } else {
+                if (thisDenominator.IsOne) {
+                    secondDenominator = otherNumerator;
+                    secondNumerator = BigInteger.One;
+                } else {
+                    var denominatorQuotient = BigInteger.DivRem(otherNumerator, thisDenominator, out var remainderDenominators);
+                    if (remainderDenominators.IsZero) {
+                        secondDenominator = denominatorQuotient;
+                        secondNumerator = BigInteger.One; // 1/10 * 50/1
+                    } else {
+                        secondDenominator = denominatorQuotient * thisDenominator + remainderDenominators;
+                        secondNumerator = thisDenominator; // 1/3 * 10/1
+                    }
+                }
+            }
+        } else {
+            if (thisNumerator.IsOne) {
+                secondNumerator = otherDenominator;
+                secondDenominator = BigInteger.One;
+            } else {
+                var numeratorQuotient = BigInteger.DivRem(otherDenominator, thisNumerator, out var remainderNumerators);
+                if (remainderNumerators.IsZero) {
+                    secondNumerator = numeratorQuotient;
+                    secondDenominator = BigInteger.One;
+                } else {
+                    secondNumerator = numeratorQuotient * thisNumerator + remainderNumerators;
+                    secondDenominator = thisNumerator;
+                }
+            }
+
+            if (otherNumerator >= thisDenominator) {
+                if (thisDenominator.IsOne) {
+                    firstNumerator = otherNumerator;
+                    firstDenominator = BigInteger.One;
+                } else {
+                    var denominatorQuotient = BigInteger.DivRem(otherNumerator, thisDenominator, out var remainderDenominators);
+                    if (remainderDenominators.IsZero) {
+                        firstNumerator = denominatorQuotient;
+                        firstDenominator = BigInteger.One;
+                    } else {
+                        firstNumerator = denominatorQuotient * thisDenominator + remainderDenominators;
+                        firstDenominator = thisDenominator;
+                    }
+                }
+            } else {
+                if (otherNumerator.IsOne) {
+                    firstDenominator = thisDenominator;
+                    firstNumerator = BigInteger.One; // ex 1/10 * 1/10
+                } else {
+                    var denominatorQuotient = BigInteger.DivRem(thisDenominator, otherNumerator, out var remainderDenominators);
+                    if (remainderDenominators.IsZero) {
+                        firstDenominator = denominatorQuotient;
+                        firstNumerator = BigInteger.One;
+                    } else {
+                        firstDenominator = denominatorQuotient * otherNumerator + remainderDenominators;
+                        firstNumerator = otherNumerator; // ex 1/10 * 3/10
+                    }
+                }
+            }
+        }
+
+        return isNegative
+            ? new Fraction(true,
+                -MultiplyTerms(ref firstNumerator, ref secondDenominator),
+                MultiplyTerms(ref firstDenominator, ref secondNumerator))
+            : new Fraction(true,
+                MultiplyTerms(ref firstNumerator, ref secondDenominator),
+                MultiplyTerms(ref firstDenominator, ref secondNumerator));
     }
 
     /// <summary>
@@ -344,13 +444,17 @@ public readonly partial struct Fraction {
         }
 
         if (_normalizationNotApplied || divisor._normalizationNotApplied) {
-            var numerator = thisNumerator.IsZero
-                ? thisNumerator
-                : MultiplyTerms(ref thisNumerator, ref otherDenominator);
-            var denominator = otherNumerator.IsZero
-                ? otherNumerator
-                : MultiplyTerms(ref thisDenominator, ref otherNumerator);
-            return new Fraction(true, numerator, denominator);
+            if (thisNumerator.IsZero) {
+                return otherNumerator.IsZero ?
+                    NaN :
+                    Zero;
+            }
+
+            if (otherNumerator.IsZero) {
+                return new Fraction(false, thisNumerator.Sign * otherDenominator.Sign, BigInteger.Zero);
+            }
+
+            return MultiplyNonZeroTerms(thisNumerator, thisDenominator, otherDenominator, otherNumerator);
         }
 
         switch (otherNumerator.Sign) {
